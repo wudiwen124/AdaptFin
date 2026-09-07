@@ -1,0 +1,1 @@
+{"case_id": "routing_risk_start", "category": "routing", "intent": "risk", "intent_ok": true, "completion_ok": true, "disclaimer_ok": true, "contains_ok": true, "llm_calls": 0, "tool_calls": 0, "audit_issue": null}

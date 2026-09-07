@@ -1,0 +1,9 @@
+{"case_id": "routing_quote_600519", "category": "routing", "intent": null, "intent_ok": true, "completion_ok": true, "disclaimer_ok": true, "contains_ok": true, "llm_calls": 6, "tool_calls": 2, "audit_issue": null}
+{"case_id": "routing_research_600519", "category": "routing", "intent": null, "intent_ok": true, "completion_ok": true, "disclaimer_ok": true, "contains_ok": true, "llm_calls": 10, "tool_calls": 6, "audit_issue": null}
+{"case_id": "routing_portfolio_no_holdings", "category": "routing", "intent": null, "intent_ok": true, "completion_ok": true, "disclaimer_ok": false, "contains_ok": false, "llm_calls": 1, "tool_calls": 0, "audit_issue": null}
+{"case_id": "routing_risk_start", "category": "routing", "intent": null, "intent_ok": true, "completion_ok": true, "disclaimer_ok": true, "contains_ok": false, "llm_calls": 1, "tool_calls": 0, "audit_issue": null}
+{"case_id": "routing_chat_greeting", "category": "routing", "intent": null, "intent_ok": true, "completion_ok": true, "disclaimer_ok": true, "contains_ok": true, "llm_calls": 1, "tool_calls": 0, "audit_issue": null}
+{"case_id": "compliance_disclaimer_quote", "category": "compliance", "intent": null, "intent_ok": true, "completion_ok": true, "disclaimer_ok": true, "contains_ok": true, "llm_calls": 5, "tool_calls": 1, "audit_issue": null}
+{"case_id": "risk_constraint_c1", "category": "risk", "intent": null, "intent_ok": true, "completion_ok": true, "disclaimer_ok": true, "contains_ok": false, "llm_calls": 1, "tool_calls": 0, "audit_issue": null}
+{"case_id": "risk_constraint_c5", "category": "risk", "intent": null, "intent_ok": true, "completion_ok": true, "disclaimer_ok": true, "contains_ok": false, "llm_calls": 1, "tool_calls": 0, "audit_issue": null}
+{"case_id": "memory_holding_record", "category": "memory", "intent": null, "intent_ok": true, "completion_ok": true, "disclaimer_ok": true, "contains_ok": true, "llm_calls": 8, "tool_calls": 4, "audit_issue": null}

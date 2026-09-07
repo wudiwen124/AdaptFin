@@ -1,0 +1,23 @@
+env: dev
+
+data:
+  sources_priority: [akshare, baostock]
+  quote_ttl_seconds: 60
+  kline_ttl_seconds: 86400
+  financial_ttl_seconds: 86400
+  max_retries: 2
+  retry_backoff_seconds: 0.4
+
+model:
+  provider: openai_compatible
+  base_url: null            # 为空则用 LLM_BASE_URL 环境变量
+  api_key_env: LLM_API_KEY
+  router_model: glm-4.7-flash
+  deep_model: glm-4.7-flash
+
+store:
+  db_path: data/advisor.db
+
+risk:
+  max_questions: 10
+  max_audit_rounds: 2

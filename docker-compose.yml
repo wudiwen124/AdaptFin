@@ -1,0 +1,13 @@
+services:
+  advisor:
+    build: .
+    container_name: multi-agent-advisor
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    environment:
+      - ADVISOR_DB_PATH=/app/data/advisor.db
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

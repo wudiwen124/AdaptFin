@@ -1,0 +1,3 @@
+{"case_id": "routing_quote_600519", "category": "routing", "intent": null, "intent_ok": true, "completion_ok": true, "disclaimer_ok": false, "contains_ok": false, "llm_calls": 2, "tool_calls": 0, "audit_issue": null}
+{"case_id": "routing_research_600519", "category": "routing", "intent": null, "intent_ok": true, "completion_ok": true, "disclaimer_ok": false, "contains_ok": false, "llm_calls": 3, "tool_calls": 0, "audit_issue": null}
+{"case_id": "routing_portfolio_no_holdings", "category": "routing", "intent": null, "intent_ok": true, "completion_ok": true, "disclaimer_ok": false, "contains_ok": false, "llm_calls": 2, "tool_calls": 0, "audit_issue": null}

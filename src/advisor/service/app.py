@@ -1,7 +1,7 @@
 """投顾助手 HTTP 服务：SSE 聊天流 + 画像/审计查询。
 
-启动示例：
-    uvicorn advisor.service.app:app --host 0.0.0.0 --port 8001
+启动示例（工厂模式，导入不会自动读取 .env）：
+    uvicorn advisor.service.app:create_app --factory --host 0.0.0.0 --port 8001
 """
 
 from __future__ import annotations
@@ -144,6 +144,3 @@ def create_app(
         return {"items": store.list_audit(user_id=user_id, limit=min(limit, 200))}
 
     return fastapi_app
-
-
-app = create_app()

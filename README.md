@@ -52,7 +52,7 @@ python scripts/embed_backfill.py      # 给存量记忆补向量（启用 embedd
 python scripts/demo_cli.py 600519     # demo 数据链路冒烟：行情 → 技术指标
 python scripts/chat_cli.py            # P2 对话 CLI（需要 .env 里的 LLM key）
 python -m pip install -e ".[server]"  # 服务层依赖
-python -m uvicorn advisor.service.app:app --port 8001   # FastAPI + SSE
+python -m uvicorn advisor.service.app:create_app --factory --port 8001   # FastAPI + SSE
 python -m pip install -e ".[ui]"      # 演示 UI 依赖
 python -m streamlit run app/ui/streamlit_app.py          # Streamlit 演示
 python scripts/run_benchmark.py --arch all               # 三架构对照（离线）

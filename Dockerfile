@@ -14,4 +14,4 @@ RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple \
 
 EXPOSE 8001
 
-CMD ["python", "-m", "uvicorn", "advisor.service.app:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["python", "-m", "uvicorn", "advisor.service.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8001"]

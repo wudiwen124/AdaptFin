@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import html as _html
-import json
 import re
 
 import streamlit as st
@@ -87,19 +86,6 @@ def main() -> None:
         else:
             st.info("尚未测评，先做 10 题风险测评")
 
-        st.subheader("风险测评")
-        with st.form("risk_form"):
-            answers = {}
-            for q in QUESTIONNAIRE:
-                labels = [o.text for o in q.options]
-                picked = st.radio(q.text, labels, key=f"q_{q.id}", label_visibility="collapsed")
-                answers[q.id] = next(o.score for o in q.options if o.text == picked)
-            if st.form_submit_button("保存测评结果（重做会覆盖并留历史）"):
-                risk = score_answers(answers)
-                store.set_risk(user_id, risk)
-                st.success(f"已保存：{risk.level.value}（{risk.score}/60），历史记录保留可查。")
-                st.rerun()
-
         st.subheader("持仓管理")
         holding_text = st.text_area(
             "一句话操作，如：\n买入 100股 510300\n卖出 600519",
@@ -127,25 +113,10 @@ def main() -> None:
             st.caption("测评历史：" + " → ".join(f"{h['level']}({h['score']})" for h in history))
         st.divider()
         with st.expander("数据管理（危险操作）"):
-            try:
-                export_payload = json.dumps(store.export_user(user_id), ensure_ascii=False, indent=2)
-                st.download_button(
-                    "导出当前用户 JSON",
-                    data=export_payload,
-                    file_name=f"{user_id}_export.json",
-                    mime="application/json",
-                    use_container_width=True,
-                )
-            except KeyError:
-                st.caption("当前用户还没有画像，暂无可导出数据。")
             if existing:
                 del_user = st.selectbox("选择要删除的用户", existing, key="del_picker")
                 confirm_del = st.checkbox(f"我确认删除 {del_user}（含画像/持仓/记忆/测评历史/对话）", key="confirm_del")
-                backup_first = st.checkbox("删除前自动备份到 data/backups", value=True, key="backup_first")
                 if st.button("删除选中用户", disabled=not confirm_del, use_container_width=True):
-                    if backup_first:
-                        backup_path = store.backup_user(del_user)
-                        st.caption(f"已备份：{backup_path}")
                     store.delete_user(del_user)
                     st.success(f"已删除用户 {del_user}")
                     st.rerun()
@@ -177,6 +148,19 @@ def main() -> None:
     )
     st.markdown('<h2 class="chat-title">AdaptFin</h2>', unsafe_allow_html=True)
     st.markdown('<div class="chat-sub">多Agent协同的智能投资顾问</div>', unsafe_allow_html=True)
+
+    with st.expander("📋 风险测评（10 题，保存后覆盖当前画像并留历史）", expanded=False):
+        with st.form("risk_form"):
+            answers = {}
+            for q in QUESTIONNAIRE:
+                labels = [o.text for o in q.options]
+                picked = st.radio(q.text, labels, key=f"q_{q.id}")
+                answers[q.id] = next(o.score for o in q.options if o.text == picked)
+            if st.form_submit_button("保存测评结果"):
+                risk = score_answers(answers)
+                store.set_risk(user_id, risk)
+                st.success(f"已保存：{risk.level.value}（{risk.score}/60），历史记录保留可查。")
+                st.rerun()
 
     history_key = f"history_{user_id}"
     if history_key not in st.session_state:

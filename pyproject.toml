@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "advisor"
 version = "0.1.0"
-description = "多 Agent 智能投顾助手（求职向项目，MVP 骨架 P0/P1）"
+description = "基于 LangGraph 的 A 股多 Agent 投资研究助手"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

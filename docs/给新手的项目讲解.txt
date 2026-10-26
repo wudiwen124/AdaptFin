@@ -1,0 +1,423 @@
+AdaptFin 项目讲解（Python 初学者版）
+======================================
+
+这份文档面向会安装依赖、写过函数和类，但没有做过多 Agent 项目的人。内容以项目
+实际代码为准，先说明系统做什么，再解释代码怎样组织、为什么这样分层，以及如何
+运行和检查。
+
+
+一、项目解决的问题
+==================
+
+直接让聊天模型分析股票，通常会出现四类问题：
+
+1. 价格、财务和公告数据可能过时，模型也可能生成不存在的数字。
+2. 模型不知道用户的风险承受能力，却容易直接给出仓位或买卖建议。
+3. 每一轮对话都从零开始，用户需要重复说明持仓和偏好。
+4. 接口失败、模型超时或输出格式错误时，整个流程容易中断。
+
+AdaptFin 的处理方式是：
+
+- 行情和财务数据由工具查询，不依赖模型记忆。
+- 指标、问卷评分和仓位限制由 Python 计算。
+- 用户风险画像、持仓和偏好分别保存，并在后续对话中读取。
+- 主流程中增加规则审计，检查数字来源、日期边界和风险提示。
+- 外部数据源或模型不可用时，尽量返回可解释的降级结果。
+
+项目覆盖 A 股个股、ETF 和主要指数，服务对象是研究辅助，不连接实盘账户。
+
+
+二、系统由哪些角色组成
+======================
+
+LangGraph 主图中有五个会调用大模型的角色：
+
+1. Supervisor
+   负责判断一句话属于行情查询、研究分析、风险测评、持仓分析还是普通聊天。
+   常见表达先用规则判断，规则无法处理时才调用模型。它还负责把股票名称换成
+   代码、处理“它”这类指代，并读取用户资料。
+
+2. Market
+   只调用行情工具，返回价格、涨跌幅、成交额、K 线等数据。这个角色不分析好坏，
+   避免数据查询和投资评价混在一起。
+
+3. Research
+   负责研究个股或持仓。每只股票会同时进行三项工作：基本面分析、技术面分析和
+   资讯分析，最后合并为一份研究报告。并行任务由 LangGraph 的 Send 创建。
+
+4. Risk
+   负责风险问卷的开始、作答、查询、重做和取消。用户选了哪些选项由代码保存，
+   总分和 C1 至 C5 风险等级也由代码计算。
+
+5. Advisor
+   读取研究报告、风险等级、持仓和偏好，生成最终回答。普通聊天使用另一套提示词，
+   不会套用“风险测评后给出投资建议”的模板。
+
+此外还有两个不调用大模型的重要节点：
+
+- Auditor 使用固定规则检查回答，包括免责声明、数字出处、日期是否超过研究截止日，
+  以及是否出现指令性买卖表述。
+- Memory Writer 把持仓、偏好、风险结果和会话状态写入存储。
+
+Research 内部的三位分析师也算独立 LLM 调用，但它们是 Research 子流程的一部分，
+不会单独接收一个用户请求。
+
+
+三、一次请求怎样走完
+====================
+
+用户在网页输入一句话后，大致经过以下步骤：
+
+1. 服务层取得 user_id 和 thread_id，加载对应用户的长期画像和会话状态。
+2. Supervisor 判断意图。例如“贵州茅台现在多少钱”进入行情分支，“分析一下 600519”
+   进入研究分支，“我想重新做测评”进入风险分支。
+3. 如果当前句子只有“它怎么样”，Supervisor 会从当前线程的实体注册表中找到最近
+   提到的股票代码。
+4. Market、Research、Risk 或持仓流程取得所需数据和证据。
+5. Advisor 把证据、用户画像和对话上下文交给模型，生成自然语言回答。
+6. Auditor 检查回答。发现问题时最多回修有限次数，超过上限后结束本轮。
+7. Memory Writer 根据本轮内容更新风险画像、持仓或偏好。
+8. 回答返回网页，侧栏的画像和持仓也会刷新。
+
+
+四、目录与各层职责
+==================
+
+根目录：
+
+- pyproject.toml
+  项目依赖和可选依赖。data 包含真实数据源，server 包含 FastAPI，ui 包含
+  Streamlit，dev 包含 pytest。
+
+- configs/settings.yaml 与 src/advisor/config.py
+  默认配置和配置加载。环境变量可以覆盖 YAML 中的值。
+
+- Dockerfile、docker-compose.yml
+  容器启动方式和数据目录映射。
+
+- 启动AdaptFin.bat
+  Windows 下启动网页的快捷脚本。
+
+领域模型：
+
+- src/advisor/schemas/common.py
+  股票代码、交易所、品种和行情周期。
+
+- src/advisor/schemas/market.py
+  行情、K 线、财务、估值、公司概况、新闻和数据来源字段。
+
+- src/advisor/schemas/research.py
+  研究结论和 EvidenceRecord。EvidenceRecord 记录工具名称、输入、返回值、来源和
+  数据日期，是后续审计的依据。
+
+- src/advisor/schemas/risk.py
+  风险问卷、C1 至 C5 等级、画像和仓位约束。
+
+- src/advisor/schemas/user.py
+  用户资料和持仓。
+
+数据层：
+
+- src/advisor/datasources/base.py
+  定义数据源必须实现的方法，以及“不支持当前数据”和“数据源不可用”两类异常。
+
+- src/advisor/datasources/__init__.py
+  DataSourceRouter 根据优先级尝试不同来源。它处理 TTL 缓存、网络重试和最终降级。
+
+- src/advisor/datasources/demo.py
+  不联网的固定数据。测试、断网演示和所有来源失败时都会用到它。
+
+- akshare_source.py、baostock_source.py、tushare_source.py
+  分别适配真实数据源。第三方库采用延迟导入，只有实际调用时才加载。
+
+模型层：
+
+- src/advisor/llm/client.py
+  ModelGateway 调用兼容 OpenAI Chat Completions 的接口。router 模型用于分类，
+  deep 模型用于研究和回答。这里有超时、重试、额度错误和备用模型处理。
+
+- src/advisor/llm/text.py
+  处理不同版本 langchain-core 的消息格式，并将模型输出的 Markdown 代码块清洗后
+  解析为 JSON。
+
+- src/advisor/llm/fake_gateway.py
+  测试使用的假模型。它按预设分支返回工具调用和文本，因此运行测试不需要 API key。
+
+编排层：
+
+- src/advisor/graph/state.py
+  AssistantState 定义主图共享的数据，包括消息、意图、画像、证据、问卷进度和实体。
+
+- src/advisor/graph/builder.py
+  把节点和条件边组装成 LangGraph，并配置 SqliteSaver。
+
+- src/advisor/graph/nodes/
+  Supervisor、Market、Research、Risk、Advisor、Auditor 和 Memory Writer 的实现。
+
+- src/advisor/orchestration/router.py
+  先执行规则路由，无法判断时调用模型。模型必须返回固定的 JSON 结构。
+
+- src/advisor/orchestration/entities.py
+  保存当前线程提到的股票，并处理“它”“那只”“走势呢”等指代。
+
+工具层：
+
+- src/advisor/tools/market_tools.py
+  对模型暴露的工具函数。参数 schema 告诉模型怎样调用，返回值是结构化数据或错误。
+
+- src/advisor/tools/indicators.py
+  MA、RSI、年化波动和最大回撤。它们都是纯函数，便于单独测试。
+
+- src/advisor/tools/risk_model.py
+  问卷分值、风险等级和约束映射。
+
+存储在 src/advisor/store/：
+
+- profile_store.py 管理用户、持仓、偏好、风险历史和审计记录。
+- recall.py 使用关键词和同义词查找相关记忆。
+- embeddings.py 调用 embedding 服务并计算余弦相似度。
+
+网页入口是 app/ui/streamlit_app.py，API 入口是 src/advisor/service/app.py。
+
+
+五、几个关键实现
+================
+
+1. LangGraph 和 State
+---------------------
+LangGraph 把流程定义为图和边。节点是普通 Python 函数，输入当前 State，返回要更新
+的字段。State 相当于流程共享的数据对象。
+
+Checkpoint 会保存每一轮的状态，所以“当前做到风险问卷第几题”“上一轮提到了哪只
+股票”等信息不必由用户重复提供。数据库文件是 data/checkpoints.db。
+
+每轮请求只传入新消息和必要字段。若每次都传一个完整初始状态，旧值会覆盖 checkpoint
+中的问卷进度，这是开发时实际遇到的问题。
+
+
+2. Function Calling
+-------------------
+模型本身不能直接查行情。代码先向模型提供工具名称、参数和用途，模型返回“调用
+get_kline，参数为 600519、日线”，程序执行函数，再把结果交给模型。
+
+工具执行过程在 agent.py 中完成，循环次数有上限，避免模型反复调用同一个失败工具。
+结果会写入 EvidenceRecord，而不是只留一段自然语言。
+
+
+3. 数据源降级
+-------------
+真实接口并不稳定。Router 会先检查缓存，然后按配置顺序尝试 akshare、baostock 或
+tushare。若当前来源不支持所需类型，会继续找下一个；若所有来源都失败，则使用 demo
+数据，并在结果中标记 degraded。
+
+这样既能继续回答，也能让后续节点知道当前不是实时数据，不能把演示数字当成真实行情。
+
+
+4. 风险测评
+-----------
+问卷共 10 题，选项对应固定分数，总分映射为 C1 至 C5。风险等级进一步对应权益比例、
+单标的仓位和投资期限提示。
+
+测评可以重新开始，但新问卷未完成前不覆盖旧画像。完成新问卷后才写入新结果，历史
+测评仍保留在 risk_history 中。
+
+
+5. 两层记忆
+-----------
+第一层是会话状态，保存在 checkpoints.db，记录消息、问卷进度和本轮中间结果。它只
+负责让对话继续。
+
+第二层是长期画像，保存在 advisor.db，记录风险等级、持仓、偏好和风险历史。它按
+user_id 分开，切换用户不会读到其他人的资料。
+
+偏好记忆支持向量召回。写入时，embedding 模型把一句话转换成 1024 个浮点数；查询时
+把问题也转换成向量，比较两者的余弦相似度。SiliconFlow 接口不可用时，代码会退回
+同义词和关键词匹配，不影响基本功能。
+
+
+6. 审计和时点约束
+-----------------
+金融数据存在发布时间。研究“2024 年 6 月的茅台”时，不能引用 2025 年才发布的公告。
+项目把研究截止日 as_of 放进行情请求，尽量从源头限制数据，再在 Auditor 中检查公告
+发布日期和财务报告期。
+
+Auditor 只能可靠检查明确规则。例如回答中的小数能否在证据中找到、是否包含免责声明、
+是否出现“立即买入”。它不能证明每一个复杂推断都正确，因此系统仍保存证据和审计记录，
+方便人工回查。
+
+
+六、网页是怎样实现的
+====================
+
+前端使用 Streamlit。它允许用 Python 写交互页面，不需要单独维护 React 项目。
+
+页面分为两部分：
+
+- 侧栏：用户选择、风险画像、持仓、风险测评和本地数据管理。
+- 主区域：对话记录和输入框。
+
+用户消息使用右侧气泡，助手消息使用左侧气泡。用户发送问题后，页面先显示消息和
+“正在思考”，等后端返回后替换为回答。对话完成后重新读取用户画像，因此一句话里的
+持仓变化会反映在侧栏。
+
+内部工具名不会直接显示给用户。例如 get_financial_summary 会整理为“东方财富业绩
+报表”，提示用户真实的数据来源。固定问题“吴帝文是谁”在路由层直接处理，避免普通
+人物问题被误判为财经研究。
+
+
+七、怎样判断项目是否正常
+========================
+
+1. 单元测试
+-----------
+执行：
+
+    python -m pytest -q
+
+测试不访问真实模型和网络。数据源、网关、审计、记忆、API 和主要图流程都有固定用例。
+当前共 105 项。
+
+
+2. 三种架构对照
+---------------
+评测脚本使用同一组 9 条问题比较三种做法：
+
+- single：一个 Agent 直接使用全部工具。
+- fixed：每次都执行固定研究流程。
+- supervisor：本项目使用的动态路由和审计。
+
+真实模型的当前结果：
+
+    架构          完成    免责声明    内容有据    平均 LLM 调用
+    single        9/9     4/9         1/9         1.67
+    fixed         9/9     8/9         5/9         3.78
+    supervisor    9/9     9/9         9/9         3.00
+
+这些指标用于检查路由、合规和证据使用，不衡量按回答交易能否赚钱。9 条用例也不能
+代表所有市场问题，结果只说明当前固定评测集上的表现。
+
+
+3. 命令行冒烟
+-------------
+数据链路：
+
+    python scripts/demo_cli.py 600519
+
+网页核心链路：
+
+    python scripts/ui_e2e_smoke.py
+
+
+八、本地运行
+============
+
+需要 Python 3.11 或 3.12。
+
+1. 安装依赖：
+
+    python -m pip install -e ".[dev,server,ui]"
+
+2. 配置环境：
+
+    复制 .env.example 为 .env
+
+   在 .env 中填写 LLM_API_KEY、LLM_BASE_URL 和模型名。聊天功能需要有效模型服务；
+   只跑离线测试不需要。
+
+3. 启动网页：
+
+    python -m streamlit run app/ui/streamlit_app.py
+
+   默认地址为 http://localhost:8501。
+
+4. 启动 API：
+
+    python -m uvicorn advisor.service.app:create_app --factory --port 8001
+
+   API 文档位于 http://localhost:8001/docs。
+
+5. 使用 Docker：
+
+    docker compose up --build
+
+.env 含有密钥，已被 .gitignore 排除。提交代码前应检查 git status，不要使用
+git add -f .env。
+
+
+九、开发时遇到的实际问题
+========================
+
+1. 不同版本 langchain-core 的消息对象字段不同，统一由 text.py 处理。
+2. LangGraph 的 Send 参数在新版中发生变化，需要按当前依赖版本调用。
+3. 每轮传入完整初始状态会覆盖问卷进度，后来改为只传新输入。
+4. 路由模型可能返回 Markdown 代码块或原样回显 JSON 模板，因此需要清洗和校验。
+5. 研究请求可能超过 HTTP 超时时间，网关需要重试和备用模型。
+6. 评测曾经复用 checkpoint，前一用例的状态污染后一用例；现在每次运行使用独立
+   run_id。
+7. 巨潮公告接口返回的数据较旧，后来换成东方财富个股公告。
+8. Docker Hub 和默认 PyPI 在网络受限环境中可能超时，因此使用镜像源；Windows 上
+   WSL 数据目录也不能直接放在 D 盘根目录。
+
+
+十、常用术语
+============
+
+Agent
+    在这里指带有固定提示词和工具权限的执行角色，不代表完全自主的软件实体。
+
+Supervisor
+    请求分派节点。
+
+Function Calling / Tool Calling
+    模型返回工具名称和参数，代码执行工具，再把结果还给模型。
+
+LangGraph
+    用节点和有向边组织状态的 Python 编排库。
+
+State
+    图中节点共享的数据对象。
+
+Node
+    图中的一个处理步骤，通常对应一个 Python 函数。
+
+Schema
+    对字段名称和类型的约束，项目主要使用 Pydantic 模型。
+
+DataSource
+    对行情和财务来源的统一访问接口。
+
+TTL 缓存
+    数据在指定时间内可重复使用，过期后重新请求。
+
+checkpoint
+    会话和执行状态的存档。
+
+PIT
+    Point-in-Time。研究某个历史时点时，只使用当时已经发布的数据。
+
+Embedding
+    把文本转换成向量。语义接近的文本，其向量在空间中也比较接近。
+
+余弦相似度
+    比较两个向量方向是否接近的指标。
+
+Streamlit
+    用 Python 快速构建数据网页的框架。
+
+SSE
+    Server-Sent Events，服务端通过一个 HTTP 连接连续发送事件。
+
+
+十一、阅读代码的建议顺序
+========================
+
+如果第一次接触这个项目，可以按下面顺序看：
+
+1. schemas：先知道各模块之间传什么数据。
+2. datasources：看一个行情请求怎样从真实接口回退到 demo。
+3. tools/indicators.py 和 risk_model.py：理解哪些计算没有使用模型。
+4. graph/state.py 与 graph/builder.py：理解主图的节点和边。
+5. nodes/supervisor.py、research.py、advisor.py：跟踪一次提问的处理过程。
+6. nodes/auditor.py：理解证据和合规检查。
+7. store 和 nodes/memory.py：理解用户数据如何保存和恢复。
+8. app/ui/streamlit_app.py：最后看页面如何调用后端。
